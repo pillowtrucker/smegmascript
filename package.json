@@ -1,0 +1,17 @@
+{
+  "name": "smegmascript",
+  "version": "1.0.0",
+  "description": "Safe JavaScript eval bot for collaborative coding",
+  "license": "AGPL-3.0",
+  "author": "",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0",
+    "quickjs-emscripten": "^0.31.0"
+  }
+}
