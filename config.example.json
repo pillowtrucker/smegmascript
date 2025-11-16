@@ -1,0 +1,5 @@
+{
+  "identifier": "your-bot-handle.bsky.social",
+  "password": "your-app-password-here",
+  "service": "https://bsky.social"
+}

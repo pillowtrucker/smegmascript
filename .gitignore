@@ -146,3 +146,5 @@ dist
 GypsFulvus
 smegmascript
 
+# Bot configuration (contains credentials)
+config.json

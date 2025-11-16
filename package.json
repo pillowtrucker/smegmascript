@@ -8,9 +8,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "bot": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@atproto/api": "^0.18.0",
+    "@skyware/jetstream": "^0.2.5",
     "node-fetch": "^2.7.0",
     "quickjs-emscripten": "^0.31.0"
   }

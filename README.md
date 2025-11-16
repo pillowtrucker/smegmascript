@@ -27,20 +27,51 @@ Since this project uses Nix for dependency management:
 
 ## Usage
 
-Run the STDIO REPL:
+### STDIO REPL (Local Testing)
+
+Run the interactive REPL:
 
 ```bash
-cd smegmascript
 node index.js
-```
-
-Or use npm script:
-
-```bash
+# or
 npm start
 ```
 
-## Example Session
+### AT Protocol Bot (Bluesky)
+
+Run the bot that listens for mentions on Bluesky:
+
+1. Create a configuration file:
+   ```bash
+   cp config.example.json config.json
+   ```
+
+2. Edit `config.json` with your bot credentials:
+   ```json
+   {
+     "identifier": "your-bot-handle.bsky.social",
+     "password": "your-app-password",
+     "service": "https://bsky.social"
+   }
+   ```
+
+   To create an app password:
+   - Go to Settings → App Passwords on Bluesky
+   - Create a new app password
+   - Use it in the config file
+
+3. Run the bot:
+   ```bash
+   node bot.js
+   # or
+   npm run bot
+   ```
+
+The bot will listen for mentions and execute JavaScript code in replies.
+
+## Example Sessions
+
+### STDIO REPL
 
 ```
 > 2 + 2
@@ -56,6 +87,40 @@ Hello, world!
 [Returns GitHub zen quote]
 
 > quit
+```
+
+### Bluesky Bot Usage
+
+Mention the bot in a post with JavaScript code:
+
+```
+@bot.bsky.social 2 + 2
+```
+
+The bot will reply with:
+```
+=> 4
+```
+
+More complex example:
+```
+@bot.bsky.social fetch('api.github.com/zen').then(r => r.body)
+```
+
+Reply:
+```
+=> "Design for failure."
+```
+
+With console output:
+```
+@bot.bsky.social console.log('Hello'); 'World'
+```
+
+Reply:
+```
+Hello
+=> World
 ```
 
 ## Available Globals in Sandbox
@@ -87,7 +152,35 @@ Based on smeggdrop configuration:
 
 ## Architecture
 
+### STDIO Interface
 - `index.js` - STDIO REPL interface
 - `sandbox.js` - QuickJS sandbox wrapper
 - `http-limiter.js` - HTTP rate limiting logic
-- `package.json` - Dependencies and configuration
+
+### AT Protocol Bot
+- `bot.js` - Main bot entry point
+- `atproto-client.js` - AT Protocol authentication and posting
+- `firehose.js` - Real-time event stream subscriber
+- `bot-worker.js` - Mention processing and code execution
+- `command-parser.js` - Extract code from mentions and format results
+- `config.json` - Bot credentials (not committed to git)
+
+### Bot Flow
+
+```
+Bluesky Post with @mention
+         ↓
+Firehose (Jetstream)
+         ↓
+Mention detected → bot-worker.js
+         ↓
+Extract code → command-parser.js
+         ↓
+Execute in sandbox → sandbox.js (QuickJS)
+         ↓
+Format result → command-parser.js
+         ↓
+Post reply → atproto-client.js
+         ↓
+Reply appears on Bluesky
+```
