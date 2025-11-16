@@ -5,6 +5,8 @@
 const AtProtoClient = require('./atproto-client');
 const FirehoseSubscriber = require('./firehose');
 const BotWorker = require('./bot-worker');
+const JobQueue = require('./job-queue');
+const AdminCommands = require('./admin-commands');
 const fs = require('fs');
 const path = require('path');
 
@@ -27,7 +29,13 @@ function loadConfig() {
   return {
     identifier: process.env.BSKY_IDENTIFIER,
     password: process.env.BSKY_PASSWORD,
-    service: process.env.BSKY_SERVICE || 'https://bsky.social'
+    service: process.env.BSKY_SERVICE || 'https://bsky.social',
+    useQueue: process.env.USE_QUEUE === 'true',
+    adminDids: process.env.ADMIN_DIDS ? process.env.ADMIN_DIDS.split(',') : [],
+    redis: {
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379', 10)
+    }
   };
 }
 
@@ -61,20 +69,75 @@ async function main() {
     console.log(`Logged in as @${profile.handle}`);
     console.log(`DID: ${client.getDid()}\n`);
 
-    // Create worker
-    const worker = new BotWorker(client, {
-      botHandle: profile.handle,
-      botDid: client.getDid(),
-      userCooldown: 5000,      // 5 seconds between evals per user
-      maxQueueSize: 100,       // Max 100 pending evaluations
-      timeout: 5000,           // 5 second execution timeout
-      httpRequestsPerEval: 5,
-      httpRequestInterval: 60,
-      httpRequestLimit: 25,
-      httpPostLimit: 150000,
-      httpTransferLimit: 150000,
-      httpTimeLimit: 5000
+    // Setup admin commands
+    const adminCommands = new AdminCommands({
+      adminDids: config.adminDids || []
     });
+
+    if (adminCommands.adminDids.size > 0) {
+      console.log(`Admin commands enabled for ${adminCommands.adminDids.size} user(s)\n`);
+    }
+
+    // Determine mode
+    const useQueue = config.useQueue || false;
+    console.log(`Mode: ${useQueue ? 'Queue (Production)' : 'Direct (Simple)'}\n`);
+
+    let queue = null;
+    let worker = null;
+
+    if (useQueue) {
+      // Queue mode - use BullMQ for production scale
+      console.log('Initializing job queue...');
+      queue = new JobQueue({
+        redis: config.redis,
+        queueName: 'smegmascript-eval',
+        concurrency: 10
+      });
+
+      // Create worker for processing jobs
+      worker = new BotWorker(client, {
+        botHandle: profile.handle,
+        botDid: client.getDid(),
+        adminCommands: adminCommands,
+        userCooldown: 5000,
+        maxQueueSize: 1000,  // Higher limit in queue mode
+        timeout: 5000,
+        httpRequestsPerEval: 5,
+        httpRequestInterval: 60,
+        httpRequestLimit: 25,
+        httpPostLimit: 150000,
+        httpTransferLimit: 150000,
+        httpTimeLimit: 5000
+      });
+
+      // Set queue reference for admin commands
+      adminCommands.setWorker(worker);
+      adminCommands.setQueue(queue);
+
+      // Initialize queue with worker processor
+      await queue.init((mention) => worker.processMention(mention));
+
+      console.log('✓ Job queue initialized');
+    } else {
+      // Direct mode - process mentions immediately
+      worker = new BotWorker(client, {
+        botHandle: profile.handle,
+        botDid: client.getDid(),
+        adminCommands: adminCommands,
+        userCooldown: 5000,
+        maxQueueSize: 100,   // Lower limit in direct mode
+        timeout: 5000,
+        httpRequestsPerEval: 5,
+        httpRequestInterval: 60,
+        httpRequestLimit: 25,
+        httpPostLimit: 150000,
+        httpTransferLimit: 150000,
+        httpTimeLimit: 5000
+      });
+
+      // Set worker reference for admin commands
+      adminCommands.setWorker(worker);
+    }
 
     // Create firehose subscriber
     const firehose = new FirehoseSubscriber({
@@ -84,7 +147,13 @@ async function main() {
 
     // Handle mentions
     firehose.on('mention', async (mention) => {
-      await worker.processMention(mention);
+      if (useQueue) {
+        // Add to queue
+        await queue.addJob(mention);
+      } else {
+        // Process directly
+        await worker.processMention(mention);
+      }
     });
 
     // Handle firehose events
@@ -105,34 +174,45 @@ async function main() {
     firehose.start();
 
     // Stats logging every 60 seconds
-    setInterval(() => {
-      const stats = worker.getStats();
-      console.log('[Stats]', {
-        processed: stats.processed,
-        successful: stats.successful,
-        failed: stats.failed,
-        rateLimited: stats.rateLimited,
-        queueSize: stats.queueSize,
-        uptime: `${Math.floor(stats.uptime / 1000)}s`
-      });
+    setInterval(async () => {
+      const workerStats = worker.getStats();
+      const stats = {
+        processed: workerStats.processed,
+        successful: workerStats.successful,
+        failed: workerStats.failed,
+        rateLimited: workerStats.rateLimited,
+        uptime: `${Math.floor(workerStats.uptime / 1000)}s`
+      };
+
+      if (useQueue) {
+        const queueStats = await queue.getStats();
+        stats.queue = queueStats;
+      } else {
+        stats.queueSize = workerStats.queueSize;
+      }
+
+      console.log('[Stats]', stats);
     }, 60000);
 
     // Graceful shutdown
-    process.on('SIGINT', () => {
+    const shutdown = async () => {
       console.log('\n\nShutting down gracefully...');
+
       firehose.stop();
+
+      if (useQueue && queue) {
+        console.log('Closing job queue...');
+        await queue.close();
+      }
 
       const stats = worker.getStats();
       console.log('\nFinal stats:', stats);
 
       process.exit(0);
-    });
+    };
 
-    process.on('SIGTERM', () => {
-      console.log('\n\nShutting down gracefully...');
-      firehose.stop();
-      process.exit(0);
-    });
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
 
   } catch (error) {
     console.error('Fatal error:', error.message);

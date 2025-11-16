@@ -5,9 +5,14 @@ Safe JavaScript eval bot for collaborative coding on AT Protocol (Bluesky).
 ## Features
 
 - **Safe sandboxed execution** using QuickJS (WebAssembly)
-- **HTTP networking** with rate limiting (based on smeggdrop limits)
+- **AT Protocol (Bluesky) integration** with real-time firehose subscription
+- **HTTP networking** with per-user rate limiting
+- **Production-ready queue mode** using BullMQ and Redis
+- **Admin commands** for bot management and monitoring
 - **STDIO interface** for local development and testing
+- **Docker containerization** for easy deployment
 - **Memory and timeout limits** to prevent DoS
+- **Accurate grapheme counting** for 300-character Bluesky limit
 
 ## Installation
 
@@ -68,6 +73,110 @@ Run the bot that listens for mentions on Bluesky:
    ```
 
 The bot will listen for mentions and execute JavaScript code in replies.
+
+### Deployment Modes
+
+The bot supports two modes:
+
+#### Direct Mode (Simple)
+- Processes mentions immediately in-memory
+- No external dependencies
+- Suitable for testing and low-traffic deployments
+- Set `useQueue: false` in config.json
+
+#### Queue Mode (Production)
+- Uses BullMQ + Redis for persistent job queue
+- Supports horizontal scaling with multiple workers
+- Better handling of traffic spikes
+- Job retries and error recovery
+- Set `useQueue: true` in config.json
+
+**Queue mode configuration:**
+```json
+{
+  "identifier": "bot.bsky.social",
+  "password": "your-app-password",
+  "service": "https://bsky.social",
+  "useQueue": true,
+  "redis": {
+    "host": "localhost",
+    "port": 6379
+  }
+}
+```
+
+### Docker Deployment
+
+The easiest way to deploy is using Docker Compose:
+
+1. Create `.env` file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your credentials:
+   ```env
+   BSKY_IDENTIFIER=your-bot-handle.bsky.social
+   BSKY_PASSWORD=your-app-password
+   USE_QUEUE=true
+   ADMIN_DIDS=did:plc:your-admin-did
+   ```
+
+3. Start the bot with Redis:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. View logs:
+   ```bash
+   docker-compose logs -f bot
+   ```
+
+5. Stop the bot:
+   ```bash
+   docker-compose down
+   ```
+
+**With Redis monitoring:**
+```bash
+docker-compose --profile monitoring up -d
+# Access Redis Commander at http://localhost:8081
+```
+
+### Admin Commands
+
+Authorized users (configured via `adminDids`) can use special commands:
+
+- `!ping` - Test bot responsiveness
+- `!stats` - Show detailed statistics
+- `!reset` - Reset statistics counters
+- `!queue` - Show queue status (queue mode only)
+- `!pause` - Pause job processing (queue mode only)
+- `!resume` - Resume job processing (queue mode only)
+- `!help` - Show admin commands
+
+**Example:**
+```
+@bot.bsky.social !stats
+```
+
+Reply:
+```
+📊 Bot Statistics:
+Processed: 1523
+Successful: 1498
+Failed: 15
+Rate Limited: 10
+Uptime: 3600s
+Tracked Users: 234
+
+📦 Queue:
+Waiting: 5
+Active: 2
+Delayed: 0
+Completed: 1498
+Failed: 15
+```
 
 ## Example Sessions
 
@@ -158,12 +267,19 @@ Based on smeggdrop configuration:
 - `http-limiter.js` - HTTP rate limiting logic
 
 ### AT Protocol Bot
-- `bot.js` - Main bot entry point
+- `bot.js` - Main bot entry point (supports both direct and queue modes)
 - `atproto-client.js` - AT Protocol authentication and posting
-- `firehose.js` - Real-time event stream subscriber
+- `firehose.js` - Real-time event stream subscriber (Jetstream)
 - `bot-worker.js` - Mention processing and code execution
-- `command-parser.js` - Extract code from mentions and format results
+- `command-parser.js` - Extract code from mentions and format results (grapheme-aware)
+- `job-queue.js` - BullMQ/Redis job queue for production scale
+- `admin-commands.js` - Admin command processing and bot management
 - `config.json` - Bot credentials (not committed to git)
+
+### Docker Deployment
+- `Dockerfile` - Multi-stage build for production
+- `docker-compose.yml` - Complete stack with Redis
+- `.env` - Environment variables for Docker Compose
 
 ### Bot Flow
 

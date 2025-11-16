@@ -11,6 +11,7 @@ class Sandbox {
     this.runtime = null;
     this.vm = null;
     this.outputBuffer = [];
+    this.currentChannel = 'default'; // Store current execution channel
   }
 
   async init() {
@@ -41,9 +42,10 @@ class Sandbox {
     logHandle.dispose();
 
     // Inject fetch function
+    const self = this;
     const fetchHandle = vm.newFunction('_fetch', (urlHandle) => {
       const url = vm.getString(urlHandle);
-      const channel = 'default';
+      const channel = self.currentChannel;
 
       const promiseHandle = vm.newPromise();
 
@@ -97,7 +99,7 @@ class Sandbox {
     const postHandle = vm.newFunction('_post', (urlHandle, bodyHandle) => {
       const url = vm.getString(urlHandle);
       const body = vm.getString(bodyHandle);
-      const channel = 'default';
+      const channel = self.currentChannel;
 
       const promiseHandle = vm.newPromise();
 
@@ -174,6 +176,7 @@ class Sandbox {
 
   async execute(code, context = {}) {
     await this.init();
+    this.currentChannel = context.channel || 'default'; // Set channel for HTTP rate limiting
     this.httpLimiter.startEval();
     this.outputBuffer = []; // Clear output buffer
 

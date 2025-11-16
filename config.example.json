@@ -1,5 +1,13 @@
 {
   "identifier": "your-bot-handle.bsky.social",
   "password": "your-app-password-here",
-  "service": "https://bsky.social"
+  "service": "https://bsky.social",
+  "useQueue": false,
+  "adminDids": [
+    "did:plc:example123456789"
+  ],
+  "redis": {
+    "host": "localhost",
+    "port": 6379
+  }
 }

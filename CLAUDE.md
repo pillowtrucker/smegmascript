@@ -411,15 +411,48 @@ AGPL-3.0 - See LICENSE file
 3. Ensure no security vulnerabilities (no command injection, XSS, etc.)
 4. Submit changes via pull request
 
-## Future Enhancements
+## Critical Fixes Applied
 
-- [ ] AT Protocol firehose integration
-- [ ] Redis-backed job queue
-- [ ] Per-user rate limiting by DID
-- [ ] Persistent user state storage
-- [ ] Multi-worker horizontal scaling
-- [ ] Metrics and monitoring (Prometheus)
-- [ ] Admin commands for bot management
-- [ ] Graceful shutdown with job completion
-- [ ] Docker containerization
+### Per-User HTTP Rate Limiting Bug (Fixed)
+**Issue:** The `sandbox.js` module hardcoded the channel to `'default'` in lines 46 and 100, breaking per-user HTTP rate limiting.
+
+**Fix:** Modified `sandbox.js` to:
+1. Store `currentChannel` in the Sandbox instance
+2. Set `currentChannel` from the execution context in `execute()`
+3. Use `self.currentChannel` in fetch/post closures instead of hardcoded `'default'`
+
+**Impact:** HTTP requests are now properly rate-limited per user DID, preventing a single user from exhausting the shared rate limit pool.
+
+**Testing:** Verified that `currentChannel` is correctly set from context parameter.
+
+### Grapheme Counting (Improved)
+**Issue:** Simple character-based truncation doesn't handle Unicode grapheme clusters correctly (emoji, combining characters).
+
+**Fix:** Integrated `grapheme-splitter` library for accurate grapheme cluster counting.
+
+**Impact:** Replies are correctly truncated to 300 graphemes as per AT Protocol specification, properly handling emoji and complex Unicode.
+
+**Testing:** Verified with emoji strings (👍 x350) correctly truncating to exactly 300 graphemes.
+
+## Implementation Status
+
+### ✅ Completed Features
+
+- [x] **AT Protocol firehose integration** - Using @skyware/jetstream for real-time event stream
+- [x] **Redis-backed job queue** - BullMQ with Redis for production scalability
+- [x] **Per-user rate limiting by DID** - 5-second cooldown per user with HTTP rate limits per channel
+- [x] **Graceful shutdown with job completion** - SIGINT/SIGTERM handlers with queue draining
+- [x] **Docker containerization** - Multi-stage Dockerfile with docker-compose.yml
+- [x] **Admin commands for bot management** - !stats, !ping, !pause, !resume, !queue, etc.
+- [x] **Proper grapheme counting** - Using grapheme-splitter for accurate 300-char limit
+- [x] **Dual operation modes** - Direct mode (simple) and Queue mode (production)
+
+### 🚧 Future Enhancements
+
+- [ ] Persistent user state storage (database integration)
+- [ ] Multi-worker horizontal scaling (requires orchestration)
+- [ ] Metrics and monitoring (Prometheus/Grafana integration)
 - [ ] Kubernetes deployment manifests
+- [ ] Rate limit configuration per user/group
+- [ ] Code execution history and analytics
+- [ ] Web dashboard for bot monitoring

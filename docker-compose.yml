@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # Redis for job queue (production mode)
+  redis:
+    image: redis:7-alpine
+    container_name: smegmascript-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - smegma-network
+
+  # smegmascript bot
+  bot:
+    build: .
+    container_name: smegmascript-bot
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # AT Protocol credentials (override via .env file)
+      BSKY_IDENTIFIER: ${BSKY_IDENTIFIER}
+      BSKY_PASSWORD: ${BSKY_PASSWORD}
+      BSKY_SERVICE: ${BSKY_SERVICE:-https://bsky.social}
+
+      # Queue mode (set to true for production)
+      USE_QUEUE: ${USE_QUEUE:-true}
+
+      # Redis connection
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+      # Admin DIDs (comma-separated)
+      ADMIN_DIDS: ${ADMIN_DIDS:-}
+    restart: unless-stopped
+    networks:
+      - smegma-network
+
+  # Optional: Redis Commander for queue monitoring
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: smegmascript-redis-commander
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    networks:
+      - smegma-network
+    profiles:
+      - monitoring
+
+volumes:
+  redis-data:
+
+networks:
+  smegma-network:
+    driver: bridge

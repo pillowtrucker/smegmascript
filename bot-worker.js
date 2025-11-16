@@ -11,6 +11,7 @@ class BotWorker {
       botHandle: config.botHandle,
       botDid: config.botDid
     });
+    this.adminCommands = config.adminCommands || null;
 
     // Per-user rate limiting
     this.userLimits = new Map();
@@ -104,6 +105,25 @@ class BotWorker {
         { uri, cid, root: post.reply?.root }
       );
       return;
+    }
+
+    // Check for admin commands first
+    if (this.adminCommands) {
+      const adminResponse = await this.adminCommands.executeCommand(
+        { post, author, uri, cid },
+        code
+      );
+
+      if (adminResponse !== null) {
+        // This was an admin command
+        console.log(`[Worker] Admin command from ${author}`);
+        await this.client.postReply(adminResponse, {
+          uri,
+          cid,
+          root: post.reply?.root
+        });
+        return;
+      }
     }
 
     console.log(`[Worker] Executing code from ${author}: ${code.substring(0, 50)}...`);

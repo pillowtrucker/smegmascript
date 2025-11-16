@@ -1,6 +1,8 @@
 // Command parser for extracting code from AT Protocol posts
 // Handles mention removal and command extraction
 
+const GraphemeSplitter = require('grapheme-splitter');
+
 class CommandParser {
   constructor(config = {}) {
     this.botHandle = config.botHandle;
@@ -117,20 +119,22 @@ class CommandParser {
 
   /**
    * Truncate text to fit within grapheme limit
-   * Simple character-based truncation (for more accuracy, use grapheme-splitter)
+   * Uses grapheme-splitter for accurate Unicode grapheme cluster counting
    *
    * @param {string} text - Text to truncate
-   * @param {number} limit - Maximum graphemes (approximate)
+   * @param {number} limit - Maximum graphemes
    * @returns {string} - Truncated text
    */
   truncateText(text, limit = 300) {
-    if (text.length <= limit) {
+    const splitter = new GraphemeSplitter();
+    const graphemes = splitter.splitGraphemes(text);
+
+    if (graphemes.length <= limit) {
       return text;
     }
 
-    // Simple truncation - not perfect for grapheme clusters
-    // For production, consider using 'grapheme-splitter' package
-    return text.substring(0, limit - 3) + '...';
+    // Truncate to limit - 3 graphemes and add ellipsis
+    return graphemes.slice(0, limit - 3).join('') + '...';
   }
 }
 
