@@ -72,6 +72,8 @@ Based on smeggdrop configuration:
 | POST body size | 150KB | Per request |
 | GET response size | 150KB | Per request |
 | HTTP timeout | 5s | Per request |
+| Stock requests per eval | 10 | Per code execution |
+| Stock cache TTL | 60s | Per symbol |
 | Execution timeout | 5s | Per eval |
 | Memory limit | 128MB | Per execution context |
 
@@ -107,8 +109,17 @@ Hello from QuickJS!
 - `console.log(...args)` - Print output to console
 - `fetch(url)` - HTTP GET request (returns `{status, statusText, headers, body}`)
 - `post(url, body)` - HTTP POST request with form-encoded body
+- `stock(symbol)` - Get real-time stock quote from Yahoo Finance
+- `stocks(...symbols)` - Get multiple stock quotes in one call
+- `stockChart(symbol, period, interval)` - Get historical price data
 
 **Note:** URLs without protocols are automatically prefixed with `https://`
+
+**Stock Features:**
+- Real-time quotes with ~15-20 minute delay (free tier)
+- 1-minute caching to reduce API calls
+- 10 stock requests per eval limit
+- Supports all Yahoo Finance symbols (US stocks, crypto, forex, etc.)
 
 ## Development Workflow
 

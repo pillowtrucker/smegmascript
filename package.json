@@ -18,6 +18,7 @@
     "grapheme-splitter": "^1.0.4",
     "ioredis": "^5.8.2",
     "node-fetch": "^2.7.0",
-    "quickjs-emscripten": "^0.31.0"
+    "quickjs-emscripten": "^0.31.0",
+    "yahoo-finance2": "^3.10.2"
   }
 }

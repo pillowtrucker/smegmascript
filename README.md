@@ -232,21 +232,58 @@ Hello
 => World
 ```
 
+**Stock quotes:**
+```
+@bot.bsky.social stock('AAPL')
+```
+
+Reply:
+```
+=> {
+  "symbol": "AAPL",
+  "name": "Apple Inc.",
+  "price": 227.48,
+  "change": -2.32,
+  "changePercent": -1.01,
+  ...
+}
+```
+
+**Multiple stocks:**
+```
+@bot.bsky.social stocks('AAPL', 'GOOGL', 'MSFT').AAPL.price
+```
+
+Reply:
+```
+=> 227.48
+```
+
 ## Available Globals in Sandbox
 
 - `console.log(...args)` - Print output
 - `fetch(url)` - HTTP GET request
 - `post(url, body)` - HTTP POST request
+- `stock(symbol)` - Get stock quote (e.g., `stock('AAPL')`)
+- `stocks(...symbols)` - Get multiple stock quotes (e.g., `stocks('AAPL', 'GOOGL', 'MSFT')`)
+- `stockChart(symbol, period, interval)` - Get historical data (e.g., `stockChart('AAPL', '1d', '5m')`)
 
 ## Rate Limits
 
 Based on smeggdrop configuration:
 
+**HTTP Requests:**
 - **5 HTTP requests** per eval
 - **25 HTTP requests** per 60 seconds (rolling window)
 - **150KB** max POST body size
 - **150KB** max GET response size
 - **5 seconds** timeout per HTTP request
+
+**Stock Quotes:**
+- **10 stock requests** per eval
+- **1 minute** cache (same symbol returns cached data)
+
+**Execution:**
 - **5 seconds** execution timeout
 - **128MB** memory limit per execution
 
