@@ -2,15 +2,21 @@
 const { newQuickJSAsyncWASMModule } = require('quickjs-emscripten');
 const fetch = require('node-fetch');
 const HttpLimiter = require('./http-limiter');
+const StockModule = require('./stock-module');
 
 class Sandbox {
   constructor(options = {}) {
     this.timeout = options.timeout || 5000; // 5 seconds default
     this.httpLimiter = new HttpLimiter(options.httpLimits || {});
+    this.stockModule = new StockModule({
+      cacheTTL: options.stockCacheTTL || 60000, // 1 minute cache
+      requestsPerEval: options.stockRequestsPerEval || 10
+    });
     this.quickjs = null;
     this.runtime = null;
     this.vm = null;
     this.outputBuffer = [];
+    this.currentChannel = 'default'; // Store current execution channel
   }
 
   async init() {
@@ -41,9 +47,10 @@ class Sandbox {
     logHandle.dispose();
 
     // Inject fetch function
+    const self = this;
     const fetchHandle = vm.newFunction('_fetch', (urlHandle) => {
       const url = vm.getString(urlHandle);
-      const channel = 'default';
+      const channel = self.currentChannel;
 
       const promiseHandle = vm.newPromise();
 
@@ -97,7 +104,7 @@ class Sandbox {
     const postHandle = vm.newFunction('_post', (urlHandle, bodyHandle) => {
       const url = vm.getString(urlHandle);
       const body = vm.getString(bodyHandle);
-      const channel = 'default';
+      const channel = self.currentChannel;
 
       const promiseHandle = vm.newPromise();
 
@@ -151,7 +158,79 @@ class Sandbox {
     vm.setProp(vm.global, '_post', postHandle);
     postHandle.dispose();
 
-    // Wrap fetch and post to parse JSON and add protocol if missing
+    // Inject stock function
+    const stockHandle = vm.newFunction('_stock', (symbolHandle) => {
+      const symbol = vm.getString(symbolHandle);
+      const promiseHandle = vm.newPromise();
+
+      (async () => {
+        try {
+          const quote = await this.stockModule.getQuote(symbol);
+          const resultHandle = vm.newString(JSON.stringify(quote));
+          promiseHandle.resolve(resultHandle);
+          resultHandle.dispose();
+        } catch (error) {
+          const errorHandle = vm.newString(error.message);
+          promiseHandle.reject(errorHandle);
+          errorHandle.dispose();
+        }
+      })();
+
+      return promiseHandle.handle;
+    });
+    vm.setProp(vm.global, '_stock', stockHandle);
+    stockHandle.dispose();
+
+    // Inject stocks function (multiple symbols)
+    const stocksHandle = vm.newFunction('_stocks', (symbolsHandle) => {
+      const symbolsJson = vm.getString(symbolsHandle);
+      const promiseHandle = vm.newPromise();
+
+      (async () => {
+        try {
+          const symbols = JSON.parse(symbolsJson);
+          const quotes = await this.stockModule.getQuotes(symbols);
+          const resultHandle = vm.newString(JSON.stringify(quotes));
+          promiseHandle.resolve(resultHandle);
+          resultHandle.dispose();
+        } catch (error) {
+          const errorHandle = vm.newString(error.message);
+          promiseHandle.reject(errorHandle);
+          errorHandle.dispose();
+        }
+      })();
+
+      return promiseHandle.handle;
+    });
+    vm.setProp(vm.global, '_stocks', stocksHandle);
+    stocksHandle.dispose();
+
+    // Inject stockChart function
+    const stockChartHandle = vm.newFunction('_stockChart', (symbolHandle, periodHandle, intervalHandle) => {
+      const symbol = vm.getString(symbolHandle);
+      const period = periodHandle ? vm.getString(periodHandle) : '1d';
+      const interval = intervalHandle ? vm.getString(intervalHandle) : '5m';
+      const promiseHandle = vm.newPromise();
+
+      (async () => {
+        try {
+          const chart = await this.stockModule.getChart(symbol, period, interval);
+          const resultHandle = vm.newString(JSON.stringify(chart));
+          promiseHandle.resolve(resultHandle);
+          resultHandle.dispose();
+        } catch (error) {
+          const errorHandle = vm.newString(error.message);
+          promiseHandle.reject(errorHandle);
+          errorHandle.dispose();
+        }
+      })();
+
+      return promiseHandle.handle;
+    });
+    vm.setProp(vm.global, '_stockChart', stockChartHandle);
+    stockChartHandle.dispose();
+
+    // Wrap fetch, post, and stock functions to parse JSON
     vm.evalCode(`
       globalThis.fetch = async function(url) {
         // Add https:// if no protocol specified
@@ -169,12 +248,26 @@ class Sandbox {
         const result = await _post(url, String(body));
         return JSON.parse(result);
       };
+      globalThis.stock = async function(symbol) {
+        const result = await _stock(String(symbol).toUpperCase());
+        return JSON.parse(result);
+      };
+      globalThis.stocks = async function(...symbols) {
+        const result = await _stocks(JSON.stringify(symbols.map(s => String(s).toUpperCase())));
+        return JSON.parse(result);
+      };
+      globalThis.stockChart = async function(symbol, period = '1d', interval = '5m') {
+        const result = await _stockChart(String(symbol).toUpperCase(), String(period), String(interval));
+        return JSON.parse(result);
+      };
     `);
   }
 
   async execute(code, context = {}) {
     await this.init();
+    this.currentChannel = context.channel || 'default'; // Set channel for HTTP rate limiting
     this.httpLimiter.startEval();
+    this.stockModule.startEval();
     this.outputBuffer = []; // Clear output buffer
 
     const vm = this.vm;

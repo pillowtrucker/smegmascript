@@ -1,0 +1,43 @@
+# Git and version control
+.git
+.gitignore
+
+# Node modules (will be installed in container)
+node_modules
+
+# Development and testing
+*.md
+!CLAUDE.md
+.env
+.env.*
+
+# Config (should be mounted as volume or env vars)
+config.json
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# CI/CD
+.github
+
+# Nix
+.direnv
+result
